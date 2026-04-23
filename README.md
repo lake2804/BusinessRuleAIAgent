@@ -1,44 +1,7 @@
 # Business Rule AI Platform
-
-## Architecture
-
-Based on your 3rd drawing (whiteboard):
-
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    RAG App (Port 8501)                          │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                  4 COMPONENTS                           │   │
-│  │                                                         │   │
-│  │  1. User Query Parser     → Parse Query                 │   │
-│  │  2. User Input File Parser→ Parse Input File            │   │
-│  │  3. Orchestrator          → Coordinate + Retrieve       │   │
-│  │  4. Final Synthesis       → Combine → Final Output      │   │
-│  │                                                         │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                              ↑                                  │
-│  ┌───────────────────────────┴─────────────────────────────┐   │
-│  │       Business Rule File Parser (Build Knowledge)       │   │
-│  │                  ↓                                      │   │
-│  │         Vector Store (ChromaDB)                         │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              │ Shared SQLite + ChromaDB
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   Review App (Port 8502)                        │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │         User Input File Parser (Review's own)           │   │
-│  │                      ↓                                  │   │
-│  │         Query → Retrieve from RAG Vector Store          │   │
-│  │                      ↓                                  │   │
-│  │                   Generate Answer                       │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
+**Groq API Key**:
+Create API key at: https://console.groq.com/keys
 
 ## Project Structure
 
