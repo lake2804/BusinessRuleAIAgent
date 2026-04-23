@@ -1,0 +1,3 @@
+[server]
+# Ignore transformers library to prevent file watcher errors
+fileWatcherType = "none"
