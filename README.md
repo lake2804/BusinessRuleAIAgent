@@ -1,5 +1,5 @@
 # Business Rule AI Platform
-```
+
 **Groq API Key**:
 Create API key at: https://console.groq.com/keys
 
