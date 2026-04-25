@@ -10,6 +10,10 @@ class LLMResponse:
     model: str
 
 
+class LLMError(RuntimeError):
+    """Raised when an LLM provider request fails."""
+
+
 class LLMProvider(ABC):
     def __init__(self, api_key: str, model: str):
         self.api_key = api_key
@@ -46,7 +50,7 @@ class GroqProvider(LLMProvider):
                 model=response.model
             )
         except Exception as e:
-            return LLMResponse(content=f"Error: {str(e)}", model="error")
+            raise LLMError(f"Groq request failed: {e}") from e
 
 
 class OpenAIProvider(LLMProvider):
@@ -66,7 +70,7 @@ class OpenAIProvider(LLMProvider):
                 model=response.model
             )
         except Exception as e:
-            return LLMResponse(content=f"Error: {str(e)}", model="error")
+            raise LLMError(f"OpenAI request failed: {e}") from e
 
 
 class LLMFactory:

@@ -57,8 +57,9 @@ class UserQueryParser:
         messages = self.llm.format_messages(system, f"Query: {query}")
         response = await self.llm.complete(messages, temperature=0.0, max_tokens=200)
         
+        import json
+
         try:
-            import json
             return json.loads(response.content)
-        except:
+        except json.JSONDecodeError:
             return {}

@@ -47,9 +47,16 @@ data/chroma/
 # Uploaded files (user data)
 data/uploads/*
 !data/uploads/.gitkeep
+data/review_uploads/*
+!data/review_uploads/.gitkeep
 
 # Streamlit
 data/user_uploads/
+
+# Tests/tools
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # OS
 .DS_Store

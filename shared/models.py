@@ -42,6 +42,7 @@ class Evidence(BaseModel):
     source_file: str
     relevance_score: float
     section_path: Optional[str] = None
+    source_page: Optional[int] = None
 
 
 class AnalysisResult(BaseModel):

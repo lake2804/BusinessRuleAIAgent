@@ -2,6 +2,8 @@
 
 Combines all intermediate results into final output.
 """
+from typing import Optional
+
 from shared.models import (
     ParsedQuery, ParsedFile, Evidence, AnalysisResult, FinalResult
 )

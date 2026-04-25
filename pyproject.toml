@@ -1,0 +1,31 @@
+[project]
+name = "business-rule-ai"
+version = "0.1.0"
+description = "Streamlit RAG platform for business rule ingestion and review."
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.30.0",
+    "pydantic>=2.0.0",
+    "groq>=0.4.0",
+    "openai>=1.10.0",
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.3.0",
+    "pypdf>=4.0.0",
+    "python-docx>=1.1.0",
+    "langgraph>=0.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

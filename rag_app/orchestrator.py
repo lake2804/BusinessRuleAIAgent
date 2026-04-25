@@ -55,7 +55,8 @@ class Orchestrator:
         matches = self.vector_store.search(
             query=parsed_query.reformulated_query or query,
             domain_id=domain_id,
-            top_k=8
+            top_k=8,
+            active_only=True,
         )
         
         evidence = [
@@ -64,7 +65,8 @@ class Orchestrator:
                 content=m["content"],
                 source_file=m["metadata"].get("source_file", "unknown"),
                 relevance_score=m["score"],
-                section_path=m["metadata"].get("section_path")
+                section_path=m["metadata"].get("section_path"),
+                source_page=m["metadata"].get("source_page") or None,
             )
             for m in matches
         ]

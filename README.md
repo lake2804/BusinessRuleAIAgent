@@ -1,132 +1,151 @@
 # Business Rule AI Platform
 
-**Groq API Key**:
-Create API key at: https://console.groq.com/keys
+Streamlit prototype for building a business-rule knowledge base and reviewing
+input files or user questions against those rules.
 
-## Project Structure
+## Architecture
 
-```
+```text
 business_rule_ai/
-├── rag_app/                          # RAG System (Port 8501)
-│   ├── parsers/
-│   │   ├── query_parser.py          # Component 1: User Query Parser
-│   │   ├── input_file_parser.py     # Component 2: User Input File Parser
-│   │   └── business_rule_parser.py  # Build Knowledge (separate!)
-│   ├── vector_store.py              # ChromaDB storage
-│   ├── orchestrator.py              # Component 3: Orchestrator
-│   ├── synthesis.py                 # Component 4: Final Synthesis
-│   └── main.py                      # Streamlit UI
-│
-├── review_app/                       # Review System (Port 8502)
-│   ├── parsers/
-│   │   └── input_file_parser.py     # OWN parser (separate from RAG!)
-│   └── main.py                      # Streamlit UI
-│
-├── shared/                           # Shared components
-│   ├── storage.py                   # SQLite persistence
-│   ├── models.py                    # Pydantic models
-│   └── llm.py                       # LLM factory
-│
-└── data/                            # Storage
-    ├── app.db                       # SQLite
-    ├── chroma/                      # Vector DB
-    ├── uploads/                     # Business rules
-    └── user_uploads/                # User input files
+|-- rag_app/                         # Knowledge-base builder, port 8501
+|   |-- parsers/
+|   |   `-- business_rule_parser.py  # Parse policy/rule documents
+|   |-- vector_store.py              # ChromaDB wrapper
+|   `-- main.py                      # Streamlit app
+|-- review_app/                      # Runtime review app, port 8502
+|   |-- parsers/
+|   |   |-- input_file_parser.py     # Review upload parser
+|   |   `-- query_parser.py          # Intent/entity parsing
+|   |-- orchestrator.py              # Query workflow coordinator
+|   |-- review_service.py            # Testable review workflow
+|   |-- synthesis.py                 # Final answer synthesis
+|   |-- workflow.py                  # Optional LangGraph wrapper
+|   `-- main.py                      # Streamlit app
+|-- shared/
+|   |-- config.py                    # Provider/model/env config
+|   |-- llm.py                       # LLM provider factory
+|   |-- models.py                    # Shared Pydantic models
+|   |-- retrieval.py                 # Retrieval planning, reranking, dedupe
+|   |-- review_prompts.py            # Validation prompts and taxonomy
+|   `-- storage.py                   # SQLite persistence
+`-- data/                            # Local runtime data, not for git
 ```
 
-## Key Separation
+## Workflow
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| **Business Rule Parser** | `rag_app/parsers/business_rule_parser.py` | Parses business rule PDFs/DOCXs to build knowledge |
-| **User Query Parser** | `rag_app/parsers/query_parser.py` | Parses user queries (intent detection) |
-| **User Input File Parser (RAG)** | `rag_app/parsers/input_file_parser.py` | Parses user files in RAG app |
-| **User Input File Parser (Review)** | `review_app/parsers/input_file_parser.py` | **SEPARATE** parser for Review app |
+```text
+Business rule file -> RAG App -> Parser -> Chunks + metadata -> Vector Store + document registry
+User query/file    -> Review App -> review_service -> retrieve/rerank evidence -> LLM answer + sources
+```
 
-## Installation
+The Review App can run through `review_app.workflow.run_review_workflow`. If
+LangGraph is installed, that wrapper uses a small graph. If LangGraph is not
+available, it falls back to the same tested service function.
+
+Supported business-rule upload formats:
+
+```text
+pdf, docx, txt, md, csv, json
+```
+
+Supported review input formats:
+
+```text
+pdf, docx, txt, md, csv, json
+```
+
+## Quick Start
 
 ```bash
 pip install -r requirements.txt
-```
 
-## Running
+# Prefer environment variables for API keys.
+export GROQ_API_KEY="your-key"
+# or
+export OPENAI_API_KEY="your-key"
 
-### Terminal 1: RAG App
-```bash
+# Terminal 1 - build knowledge
 streamlit run rag_app/main.py --server.port 8501
-```
 
-### Terminal 2: Review App
-```bash
+# Terminal 2 - query and validate
 streamlit run review_app/main.py --server.port 8502
 ```
 
-## Usage Flow
+On Windows PowerShell:
 
-### RAG App (Port 8501)
-
-1. **Configure API Key** in sidebar → Save
-2. **Build Knowledge:**
-   - Create domain
-   - Upload business rule files (PDF/DOCX)
-   - Files parsed by `business_rule_parser.py`
-   - Stored in ChromaDB
-3. **Query with 4 Components:**
-   - Enter query → **Query Parser** detects intent
-   - Upload file (optional) → **Input File Parser** extracts content
-   - **Orchestrator** retrieves evidence + analyzes
-   - **Final Synthesis** generates polished output
-
-### Review App (Port 8502)
-
-1. Configure same API key
-2. Select domain (from RAG)
-3. Enter query
-4. Upload input file → uses **OWN parser** (`review_app/parsers/`)
-5. Retrieve evidence from RAG's vector store
-6. Generate answer
-
-## Data Flow
-
-**Building Knowledge:**
-```
-Business Rule PDF → Business Rule Parser → Chunks → Vector Store
+```powershell
+$env:GROQ_API_KEY="your-key"
+streamlit run rag_app/main.py --server.port 8501
 ```
 
-**RAG Query (4 Components):**
+## Configuration
+
+Provider and model preferences can be saved from the Streamlit sidebar. API keys
+are intentionally not saved to SQLite. Use environment variables for corporate
+or shared deployments:
+
+```text
+GROQ_API_KEY
+OPENAI_API_KEY
+APP_DB_PATH       optional, defaults to ./data/app.db
+CHROMA_DB_PATH    optional, defaults to ./data/chroma
 ```
-User Query → Query Parser → Orchestrator → Final Synthesis → Output
-User File  → Input File Parser ──┘              ↑
-Vector Store Evidence ←─────────────────────────┘
+
+Copy `.env.example` for local development notes, but do not commit real keys.
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+python -m compileall rag_app review_app shared
+pytest
+ruff check .
 ```
 
-**Review Query:**
+The first tests focus on:
+
+```text
+retrieval planning and reranking
+evidence deduplication
+business-rule JSON/table parsing
+validation prompt grounding requirements
+review service workflow
 ```
-User Query ────────────────────────────┐
-User File → Review's Input File Parser → Retrieve from RAG Vector Store → Answer
+
+## Validation Behavior
+
+Validation prompts require the model to distinguish:
+
+```text
+missing_input
+invalid_or_unsupported_input
+evidence_gap
+hard_restriction
+approval_path
+rule_violation
+conditional_resolution
 ```
 
-## Code Files by Role
+The prompt also asks for evidence-strength labels:
 
-### RAG App - 4 Components
+```text
+direct_rule
+derived_from_rule
+evidence_gap
+```
 
-| File | Component | Role |
-|------|-----------|------|
-| `parsers/query_parser.py` | 1 | Detects intent: Q&A / Validation / Analysis |
-| `parsers/input_file_parser.py` | 2 | Parses user files (PDF/DOCX/TXT) |
-| `orchestrator.py` | 3 | Coordinates workflow, retrieves evidence |
-| `synthesis.py` | 4 | Combines results into final output |
+## Docker
 
-### Plus: Knowledge Building
+The Dockerfile defaults to the Review App on port 8502:
 
-| File | Role |
-|------|------|
-| `parsers/business_rule_parser.py` | Parses business rules to build knowledge base |
-| `vector_store.py` | ChromaDB for embeddings |
+```bash
+docker build -t business-rule-ai .
+docker run --rm -p 8502:8502 -e GROQ_API_KEY="your-key" business-rule-ai
+```
 
-### Review App
+To run the RAG App in the same image:
 
-| File | Role |
-|------|------|
-| `parsers/input_file_parser.py` | **Separate** parser for user files |
-| `main.py` | UI + retrieval + answer generation |
+```bash
+docker run --rm -p 8501:8501 -e GROQ_API_KEY="your-key" business-rule-ai \
+  streamlit run rag_app/main.py --server.address=0.0.0.0 --server.port=8501
+```
