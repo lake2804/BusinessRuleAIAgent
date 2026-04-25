@@ -8,11 +8,11 @@ Coordinates the workflow:
 """
 from typing import Optional
 from shared.models import (
-    ParsedQuery, ParsedFile, Evidence, AnalysisResult, TaskType
+    ParsedQuery, Evidence, AnalysisResult, TaskType
 )
 from shared.llm import LLMProvider
 from review_app.parsers.query_parser import UserQueryParser
-from review_app.parsers.rag_input_file_parser import UserInputFileParser
+from review_app.parsers.input_file_parser import UserInputFileParser
 from rag_app.vector_store import VectorStore
 
 
@@ -89,7 +89,7 @@ class Orchestrator:
         self,
         parsed_query: ParsedQuery,
         evidence: list,
-        parsed_file: Optional[ParsedFile]
+        parsed_file: Optional[dict]
     ) -> str:
         """Perform analysis based on task type."""
         evidence_text = "\n\n---\n\n".join([
@@ -100,7 +100,7 @@ class Orchestrator:
             # Validation task
             system = """You are a compliance validator. Check the input against rules.
 Identify violations and compliance status."""
-            user = f"""Rules:\n{evidence_text}\n\n---\n\nInput to validate:\n{parsed_file.content}\n\nQuery: {parsed_query.original_query}"""
+            user = f"""Rules:\n{evidence_text}\n\n---\n\nInput to validate:\n{parsed_file['content']}\n\nQuery: {parsed_query.original_query}"""
         
         elif parsed_query.intent == TaskType.ANALYSIS:
             # Analysis task
