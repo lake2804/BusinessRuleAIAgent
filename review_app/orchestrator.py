@@ -1,4 +1,4 @@
-"""RAG App - Component 3: Orchestrator.
+"""Review App - Orchestrator.
 
 Coordinates the workflow:
 1. Parse Query (User Query Parser)
@@ -11,8 +11,8 @@ from shared.models import (
     ParsedQuery, ParsedFile, Evidence, AnalysisResult, TaskType
 )
 from shared.llm import LLMProvider
-from rag_app.parsers.query_parser import UserQueryParser
-from rag_app.parsers.input_file_parser import UserInputFileParser
+from review_app.parsers.query_parser import UserQueryParser
+from review_app.parsers.rag_input_file_parser import UserInputFileParser
 from rag_app.vector_store import VectorStore
 
 

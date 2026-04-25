@@ -1,11 +1,11 @@
-"""RAG App - Component 4: Final Synthesis.
+"""Review App - Final Synthesis.
 
 Combines all intermediate results into final output.
 """
 from typing import Optional
 
 from shared.models import (
-    ParsedQuery, ParsedFile, Evidence, AnalysisResult, FinalResult
+    ParsedQuery, ParsedFile, AnalysisResult, FinalResult
 )
 from shared.llm import LLMProvider
 

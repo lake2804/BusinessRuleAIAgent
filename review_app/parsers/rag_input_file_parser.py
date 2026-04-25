@@ -1,4 +1,4 @@
-"""RAG App - Component 2: User Input File Parser.
+"""Review App - Typed User Input File Parser.
 
 Parses files uploaded by users for validation/analysis.
 """

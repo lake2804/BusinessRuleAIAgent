@@ -1,4 +1,4 @@
-"""RAG App - Component 1: User Query Parser.
+"""Review App - User Query Parser.
 
 Parses user query to determine intent and extract entities.
 """
