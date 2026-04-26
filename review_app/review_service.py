@@ -20,7 +20,7 @@ from shared.retrieval import (
     plan_retrieval,
     rerank_matches,
     summarize_coverage,
-    trim_matches_by_budget,
+    trim_matches_by_budget_with_count,
 )
 
 
@@ -79,10 +79,17 @@ async def run_review(
         )
 
     matches = deduplicate_matches(raw_matches)
+    deduped_count = len(matches)
     matches = rerank_matches(matches, retrieval_query, retrieval_plan.mode)
     matches = order_matches_for_prompt(matches, retrieval_plan.mode)
-    matches = trim_matches_by_budget(matches)
-    coverage = summarize_coverage(len(raw_matches), matches, retrieval_plan)
+    matches, budget_trimmed_count = trim_matches_by_budget_with_count(matches)
+    coverage = summarize_coverage(
+        len(raw_matches),
+        deduped_count,
+        matches,
+        retrieval_plan,
+        budget_trimmed_count=budget_trimmed_count,
+    )
 
     if not matches:
         raise ValueError("No evidence matched this query. Try a broader query or ingest rules first.")

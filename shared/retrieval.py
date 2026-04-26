@@ -19,8 +19,17 @@ SUMMARY_TERMS = [
     "overview",
 ]
 
-VALIDATION_TERMS = ["validate", "check", "comply", "compliance", "verify"]
-ANALYSIS_TERMS = ["analyze", "compare", "difference", "trend", "pattern"]
+VALIDATION_TERMS = [
+    "validate",
+    "validation",
+    "check",
+    "comply",
+    "complies",
+    "complying",
+    "compliance",
+    "verify",
+]
+ANALYSIS_TERMS = ["analyze", "analysis", "compare", "comparison", "difference", "trend", "pattern"]
 
 
 @dataclass(frozen=True)
@@ -34,13 +43,24 @@ class RetrievalPlan:
 
 def detect_query_mode(query: str, has_input_file: bool = False) -> str:
     query_lower = query.lower()
-    if any(term in query_lower for term in SUMMARY_TERMS):
+    tokens = set(re.findall(r"\b[\w+-]+\b", query_lower))
+    if _matches_mode_terms(query_lower, tokens, SUMMARY_TERMS):
         return "summary"
-    if has_input_file or any(term in query_lower for term in VALIDATION_TERMS):
+    if has_input_file or _matches_mode_terms(query_lower, tokens, VALIDATION_TERMS):
         return "validation"
-    if any(term in query_lower for term in ANALYSIS_TERMS):
+    if _matches_mode_terms(query_lower, tokens, ANALYSIS_TERMS):
         return "analysis"
     return "qna"
+
+
+def _matches_mode_terms(query_lower: str, tokens: set[str], terms: List[str]) -> bool:
+    for term in terms:
+        if " " in term:
+            if re.search(rf"\b{re.escape(term)}\b", query_lower):
+                return True
+        elif term in tokens:
+            return True
+    return False
 
 
 def plan_retrieval(query: str, has_input_file: bool = False) -> RetrievalPlan:
@@ -138,8 +158,11 @@ def deduplicate_matches(matches: Iterable[Dict[str, Any]]) -> List[Dict[str, Any
 
     for match in matches:
         metadata = match.get("metadata", {})
+        source_id = metadata.get("document_id") or metadata.get("source_file")
+        if not source_id:
+            source_id = match.get("chunk_id") or f"unidentified:{id(match)}"
         key = (
-            metadata.get("document_id") or metadata.get("source_file") or "",
+            source_id,
             metadata.get("section_path") or "",
             _content_hash(match.get("content", "")),
         )
@@ -205,7 +228,13 @@ def rerank_matches(matches: List[Dict[str, Any]], query: str, mode: str) -> List
     return sorted(reranked, key=lambda item: item.get("rerank_score", item.get("score", 0)), reverse=True)
 
 
-def summarize_coverage(raw_count: int, matches: List[Dict[str, Any]], plan: RetrievalPlan) -> Dict[str, Any]:
+def summarize_coverage(
+    raw_count: int,
+    deduped_count: int,
+    matches: List[Dict[str, Any]],
+    plan: RetrievalPlan,
+    budget_trimmed_count: int = 0,
+) -> Dict[str, Any]:
     documents = {
         match.get("metadata", {}).get("source_file", "unknown")
         for match in matches
@@ -230,8 +259,11 @@ def summarize_coverage(raw_count: int, matches: List[Dict[str, Any]], plan: Retr
         "reason": plan.reason,
         "requested_top_k": plan.top_k,
         "raw_evidence_count": raw_count,
+        "deduped_evidence_count": deduped_count,
+        "final_evidence_count": len(matches),
         "unique_evidence_count": len(matches),
-        "duplicates_removed": max(raw_count - len(matches), 0),
+        "duplicates_removed": max(raw_count - deduped_count, 0),
+        "budget_trimmed_count": max(budget_trimmed_count, 0),
         "document_count": len(documents),
         "section_count": len(sections),
         "versions": sorted(str(version) for version in versions),
@@ -243,15 +275,36 @@ def summarize_coverage(raw_count: int, matches: List[Dict[str, Any]], plan: Retr
 
 def trim_matches_by_budget(matches: List[Dict[str, Any]], max_chars: int = 60000) -> List[Dict[str, Any]]:
     """Keep evidence within a simple prompt budget while preserving order."""
+    return trim_matches_by_budget_with_count(matches, max_chars=max_chars)[0]
+
+
+def trim_matches_by_budget_with_count(
+    matches: List[Dict[str, Any]],
+    max_chars: int = 60000,
+) -> tuple[List[Dict[str, Any]], int]:
+    """Keep evidence within budget and report how many matches were removed."""
     trimmed = []
     used_chars = 0
-    for match in matches:
-        content_len = len(match.get("content", ""))
-        if trimmed and used_chars + content_len > max_chars:
+    for index, match in enumerate(matches):
+        content = match.get("content", "")
+        content_len = len(content)
+        remaining = max_chars - used_chars
+        if content_len > remaining:
+            if not trimmed and max_chars > 0:
+                truncated = dict(match)
+                truncated_metadata = dict(match.get("metadata", {}))
+                truncated_metadata["content_truncated"] = True
+                truncated_metadata["original_content_chars"] = content_len
+                truncated["metadata"] = truncated_metadata
+                truncated["content"] = content[:max_chars]
+                trimmed.append(truncated)
+                return trimmed, len(matches) - index - 1
+            return trimmed, len(matches) - index
+        if used_chars + content_len > max_chars:
             break
         trimmed.append(match)
         used_chars += content_len
-    return trimmed
+    return trimmed, max(len(matches) - len(trimmed), 0)
 
 
 def order_matches_for_prompt(matches: List[Dict[str, Any]], mode: str) -> List[Dict[str, Any]]:

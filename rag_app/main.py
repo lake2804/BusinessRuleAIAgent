@@ -15,11 +15,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from rag_app.parsers.business_rule_parser import BusinessRuleFileParser
 from rag_app.vector_store import VectorStore
 from shared.config import (
-    get_api_key,
-    get_api_key_env_var,
     get_default_model,
     get_models,
+    get_providers,
     normalize_model,
+    normalize_provider,
 )
 from shared.storage import (
     create_domain,
@@ -60,11 +60,13 @@ st.sidebar.markdown("---")
 
 st.sidebar.subheader("Provider Settings")
 saved_config = get_provider_config()
+provider_options = get_providers()
+saved_provider = normalize_provider(saved_config.get("provider") if saved_config else None)
 
 provider = st.sidebar.selectbox(
     "Provider",
-    ["groq", "openai"],
-    index=0 if not saved_config else ["groq", "openai"].index(saved_config.get("provider", "groq")),
+    provider_options,
+    index=provider_options.index(saved_provider),
 )
 
 models_for_provider = get_models(provider)
@@ -80,13 +82,7 @@ model = st.sidebar.selectbox(
     help="Provider and model preferences are saved; API keys are not saved.",
 )
 
-env_api_key = get_api_key(provider)
-api_key = st.sidebar.text_input(
-    "API Key (session only)",
-    type="password",
-    value=env_api_key,
-    help=f"Prefer setting {get_api_key_env_var(provider)}. This field is not saved to SQLite.",
-)
+st.sidebar.caption("API keys are only needed in the Review App when running LLM queries.")
 
 if st.sidebar.button("Save Settings"):
     save_provider_config(provider, model)
@@ -150,11 +146,6 @@ with col2:
 
                         try:
                             _text, chunks = components["business_parser"].parse(file_path)
-                            components["vector_store"].deactivate_rules(
-                                domain_id=domain_id,
-                                document_id=document_id,
-                            )
-
                             texts = [c["content"] for c in chunks]
                             metadata = [
                                 {
@@ -174,6 +165,11 @@ with col2:
                             ]
 
                             ids = components["vector_store"].add_rules(texts, metadata)
+                            components["vector_store"].deactivate_rules(
+                                domain_id=domain_id,
+                                document_id=document_id,
+                                exclude_ids=set(ids),
+                            )
                             save_document_record(
                                 document_id=document_id,
                                 domain_id=domain_id,

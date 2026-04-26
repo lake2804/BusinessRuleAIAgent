@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import os
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 try:
     import chromadb
@@ -43,6 +43,13 @@ class VectorStore:
         return self._embedder.encode(text, convert_to_numpy=True).tolist()
     
     def _clean_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Clean new-ingest metadata and add audit defaults."""
+        cleaned = self._scrub_metadata(metadata)
+        cleaned.setdefault("ingested_at", datetime.now(timezone.utc).isoformat())
+        cleaned.setdefault("active", True)
+        return cleaned
+
+    def _scrub_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Chroma metadata values must be scalar and not None."""
         cleaned = {}
         for key, value in metadata.items():
@@ -52,8 +59,6 @@ class VectorStore:
                 cleaned[key] = value
             else:
                 cleaned[key] = str(value)
-        cleaned.setdefault("ingested_at", datetime.now(timezone.utc).isoformat())
-        cleaned.setdefault("active", True)
         return cleaned
 
     def add_rules(self, texts: List[str], metadata: List[Dict]) -> List[str]:
@@ -99,12 +104,6 @@ class VectorStore:
             n_results=top_k,
             where=where
         )
-        if active_only and (not results["ids"] or not results["ids"][0]):
-            results = self._collection.query(
-                query_embeddings=[query_vector],
-                n_results=top_k,
-                where={"domain_id": domain_id}
-            )
         
         matches = []
         if results["ids"] and results["ids"][0]:
@@ -144,12 +143,6 @@ class VectorStore:
             include=["documents", "metadatas"],
             limit=limit,
         )
-        if active_only and not results.get("ids"):
-            results = self._collection.get(
-                where={"domain_id": domain_id},
-                include=["documents", "metadatas"],
-                limit=limit,
-            )
 
         matches = []
         for chunk_id, content, metadata in zip(
@@ -178,6 +171,7 @@ class VectorStore:
         ruleset_id: Optional[str] = None,
         version: Optional[str] = None,
         document_id: Optional[str] = None,
+        exclude_ids: Optional[Set[str]] = None,
     ) -> int:
         """Mark matching chunks inactive while keeping them for traceability."""
         filters = [{"domain_id": domain_id}]
@@ -195,16 +189,24 @@ class VectorStore:
         if not ids:
             return 0
 
+        excluded = exclude_ids or set()
         updated_metadata = []
+        ids_to_update = []
         deactivated_at = datetime.now(timezone.utc).isoformat()
-        for item in metadatas:
+        for chunk_id, item in zip(ids, metadatas):
+            if chunk_id in excluded:
+                continue
             metadata = dict(item)
             metadata["active"] = False
             metadata["deactivated_at"] = deactivated_at
-            updated_metadata.append(self._clean_metadata(metadata))
+            ids_to_update.append(chunk_id)
+            updated_metadata.append(self._scrub_metadata(metadata))
 
-        self._collection.update(ids=ids, metadatas=updated_metadata)
-        return len(ids)
+        if not ids_to_update:
+            return 0
+
+        self._collection.update(ids=ids_to_update, metadatas=updated_metadata)
+        return len(ids_to_update)
     
     def get_stats(self) -> Dict:
         return {"total_chunks": self._collection.count() if self._collection else 0}

@@ -33,6 +33,17 @@ API_KEY_ENV_VARS = {
 }
 
 
+def get_providers() -> List[str]:
+    return list(AVAILABLE_MODELS.keys())
+
+
+def normalize_provider(provider: str | None) -> str:
+    providers = get_providers()
+    if provider in providers:
+        return provider
+    return providers[0]
+
+
 def get_models(provider: str) -> List[str]:
     return AVAILABLE_MODELS.get(provider, [])
 

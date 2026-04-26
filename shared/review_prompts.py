@@ -26,21 +26,14 @@ GROUNDING_CHECKLIST = [
 def format_citations(matches: List[Dict[str, Any]]) -> List[str]:
     """Build stable, compact citation labels for prompt and UI display."""
     citations = []
-    seen = set()
-    citation_index = 1
-    for match in matches:
+    for index, match in enumerate(matches, 1):
         metadata = match.get("metadata", {})
         source = metadata.get("source_file", "unknown")
         section = metadata.get("section_path", "unknown")
         version = metadata.get("version", "unknown")
         page = metadata.get("source_page")
-        key = (source, section, version, page)
-        if key in seen:
-            continue
-        seen.add(key)
-        page_text = f", page {page}" if page else ""
-        citations.append(f"[S{citation_index}] {source}, {section}, v{version}{page_text}")
-        citation_index += 1
+        page_text = f", page {page}" if page is not None and page != "" else ""
+        citations.append(f"[S{index}] {source}, {section}, v{version}{page_text}")
     return citations
 
 
@@ -49,7 +42,7 @@ def format_evidence_for_prompt(matches: List[Dict[str, Any]]) -> str:
     for index, match in enumerate(matches, 1):
         metadata = match.get("metadata", {})
         page = metadata.get("source_page")
-        page_text = f"; Page: {page}" if page else ""
+        page_text = f"; Page: {page}" if page is not None and page != "" else ""
         blocks.append(
             (
                 f"[S{index}] Source: {metadata.get('source_file', 'unknown')}; "

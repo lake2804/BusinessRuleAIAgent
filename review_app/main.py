@@ -20,7 +20,9 @@ from shared.config import (
     get_api_key_env_var,
     get_default_model,
     get_models,
+    get_providers,
     normalize_model,
+    normalize_provider,
 )
 from shared.llm import LLMError, LLMFactory
 from shared.review_prompts import (
@@ -49,11 +51,13 @@ st.sidebar.markdown("---")
 
 st.sidebar.subheader("Provider Settings")
 saved_config = get_provider_config()
+provider_options = get_providers()
+saved_provider = normalize_provider(saved_config.get("provider") if saved_config else None)
 
 provider = st.sidebar.selectbox(
     "Provider",
-    ["groq", "openai"],
-    index=0 if not saved_config else ["groq", "openai"].index(saved_config.get("provider", "groq")),
+    provider_options,
+    index=provider_options.index(saved_provider),
 )
 
 models_for_provider = get_models(provider)
@@ -69,13 +73,13 @@ model = st.sidebar.selectbox(
     help="Provider and model preferences are saved; API keys are not saved.",
 )
 
-env_api_key = get_api_key(provider)
-api_key = st.sidebar.text_input(
+manual_api_key = st.sidebar.text_input(
     "API Key (session only)",
     type="password",
-    value=env_api_key,
+    value="",
     help=f"Prefer setting {get_api_key_env_var(provider)}. This field is not saved to SQLite.",
 )
+api_key = manual_api_key or get_api_key(provider)
 
 if st.sidebar.button("Save Settings"):
     save_provider_config(provider, model)
@@ -174,8 +178,10 @@ with col2:
                     "mode": coverage["mode"],
                     "documents": coverage["document_count"],
                     "sections": coverage["section_count"],
-                    "unique_chunks": coverage["unique_evidence_count"],
+                    "deduped_chunks": coverage["deduped_evidence_count"],
+                    "final_chunks": coverage["final_evidence_count"],
                     "duplicates_removed": coverage["duplicates_removed"],
+                    "budget_trimmed": coverage["budget_trimmed_count"],
                     "versions": coverage["versions"],
                     "best_score": round(coverage["best_score"], 3),
                     "average_score": round(coverage["average_score"], 3),
