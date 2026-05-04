@@ -19,6 +19,13 @@ def init_db():
     cursor = conn.cursor()
     
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS domains (
             domain_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -50,9 +57,55 @@ def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS review_runs (
+            review_id TEXT PRIMARY KEY,
+            domain_id TEXT NOT NULL,
+            query TEXT NOT NULL,
+            input_file TEXT DEFAULT '',
+            confidence_json TEXT NOT NULL DEFAULT '{}',
+            structured_json TEXT NOT NULL DEFAULT '{}',
+            evidence_json TEXT NOT NULL DEFAULT '[]',
+            export_json TEXT NOT NULL DEFAULT '{}',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ingestion_jobs (
+            job_id TEXT PRIMARY KEY,
+            domain_id TEXT NOT NULL,
+            source_file TEXT NOT NULL,
+            status TEXT NOT NULL,
+            message TEXT DEFAULT '',
+            chunk_count INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    _apply_migrations(conn)
     
     conn.commit()
     conn.close()
+
+
+def _migration_applied(conn: sqlite3.Connection, version: int) -> bool:
+    row = conn.execute("SELECT version FROM schema_migrations WHERE version = ?", (version,)).fetchone()
+    return row is not None
+
+
+def _mark_migration(conn: sqlite3.Connection, version: int):
+    conn.execute("INSERT INTO schema_migrations (version) VALUES (?)", (version,))
+
+
+def _apply_migrations(conn: sqlite3.Connection):
+    if not _migration_applied(conn, 1):
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_domain ON documents(domain_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_ruleset ON documents(ruleset_id, version)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status)")
+        _mark_migration(conn, 1)
 
 
 def create_domain(domain_id: str, name: str, description: str = "") -> Dict:
@@ -64,6 +117,13 @@ def create_domain(domain_id: str, name: str, description: str = "") -> Dict:
     conn.commit()
     conn.close()
     return {"domain_id": domain_id, "name": name, "description": description}
+
+
+def get_domain(domain_id: str) -> Optional[Dict]:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM domains WHERE domain_id = ?", (domain_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def list_domains() -> List[Dict]:
@@ -145,6 +205,100 @@ def list_documents(domain_id: Optional[str] = None) -> List[Dict]:
         documents.append(item)
     conn.close()
     return documents
+
+
+def update_document_status(document_id: str, status: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE documents SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE document_id = ?",
+        (status, document_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_review_run(
+    review_id: str,
+    domain_id: str,
+    query: str,
+    input_file: str,
+    confidence: Dict,
+    structured_output: Optional[Dict],
+    evidence: List[Dict],
+    exports: Dict,
+):
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO review_runs (
+               review_id, domain_id, query, input_file, confidence_json,
+               structured_json, evidence_json, export_json
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            review_id,
+            domain_id,
+            query,
+            input_file,
+            json.dumps(confidence or {}),
+            json.dumps(structured_output or {}),
+            json.dumps(evidence or []),
+            json.dumps(exports or {}),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_review_runs(limit: int = 25) -> List[Dict]:
+    conn = get_connection()
+    cursor = conn.execute(
+        "SELECT * FROM review_runs ORDER BY created_at DESC LIMIT ?",
+        (limit,),
+    )
+    runs = []
+    for row in cursor.fetchall():
+        item = dict(row)
+        item["confidence"] = json.loads(item.pop("confidence_json") or "{}")
+        item["structured_output"] = json.loads(item.pop("structured_json") or "{}")
+        item["evidence"] = json.loads(item.pop("evidence_json") or "[]")
+        item["exports"] = json.loads(item.pop("export_json") or "{}")
+        runs.append(item)
+    conn.close()
+    return runs
+
+
+def save_ingestion_job(
+    job_id: str,
+    domain_id: str,
+    source_file: str,
+    status: str,
+    message: str = "",
+    chunk_count: int = 0,
+):
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO ingestion_jobs (
+               job_id, domain_id, source_file, status, message, chunk_count
+           ) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(job_id) DO UPDATE SET
+               status = excluded.status,
+               message = excluded.message,
+               chunk_count = excluded.chunk_count,
+               updated_at = CURRENT_TIMESTAMP""",
+        (job_id, domain_id, source_file, status, message, chunk_count),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_ingestion_jobs(limit: int = 25) -> List[Dict]:
+    conn = get_connection()
+    cursor = conn.execute(
+        "SELECT * FROM ingestion_jobs ORDER BY updated_at DESC LIMIT ?",
+        (limit,),
+    )
+    jobs = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jobs
 
 
 def save_setting(key: str, value: str):

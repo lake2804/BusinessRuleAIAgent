@@ -1,0 +1,22 @@
+[
+  {
+    "id": "fraud_hold",
+    "query": "Validate every row against the ORR business-rule domain.",
+    "input": {"case_id": "IN-003", "fraud_screen": "pending"},
+    "expected_issue_types": ["hard_restriction"],
+    "expected_owner_terms": ["Risk Ops"]
+  },
+  {
+    "id": "payment_redirection",
+    "query": "Validate every row against the ORR business-rule domain.",
+    "input": {"case_id": "IN-005", "payment_destination_changed": true},
+    "expected_issue_types": ["hard_restriction", "approval_path"],
+    "expected_owner_terms": ["Finance", "Risk Ops"]
+  },
+  {
+    "id": "missing_region",
+    "query": "Validate every row against the ORR business-rule domain.",
+    "input": {"case_id": "IN-004", "region": ""},
+    "expected_issue_types": ["missing_input"]
+  }
+]

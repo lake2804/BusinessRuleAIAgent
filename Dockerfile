@@ -13,6 +13,6 @@ RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 8501 8502
+EXPOSE 8602
 
-CMD ["streamlit", "run", "review_app/main.py", "--server.address=0.0.0.0", "--server.port=8502"]
+CMD ["python", "-m", "review_app.api_server", "--port", "8602"]

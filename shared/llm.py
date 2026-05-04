@@ -37,9 +37,12 @@ class GroqProvider(LLMProvider):
         try:
             import groq
             if not self._client:
-                self._client = groq.Groq(api_key=self.api_key)
+                async_client = getattr(groq, "AsyncGroq", None)
+                if async_client is None:
+                    raise LLMError("Installed groq package does not provide AsyncGroq.")
+                self._client = async_client(api_key=self.api_key)
             
-            response = self._client.chat.completions.create(
+            response = await self._client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=kwargs.get('temperature', 0.1),

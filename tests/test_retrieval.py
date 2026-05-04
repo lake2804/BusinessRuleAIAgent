@@ -1,15 +1,19 @@
 from shared.retrieval import (
+    build_input_content_query,
     deduplicate_matches,
     detect_query_mode,
+    filter_low_value_evidence,
     plan_retrieval,
     rerank_matches,
     summarize_coverage,
     trim_matches_by_budget_with_count,
+    expand_parent_child_context,
 )
 
 
 def test_detect_query_mode_validation_when_file_present():
     assert detect_query_mode("Please review this batch", has_input_file=True) == "validation"
+    assert detect_query_mode("Is this file correct due to the business rule?") == "validation"
 
 
 def test_detect_query_mode_uses_whole_words():
@@ -90,3 +94,33 @@ def test_summarize_coverage_separates_dedup_and_budget_trim():
     )
     assert coverage["duplicates_removed"] == 2
     assert coverage["budget_trimmed_count"] == 2
+
+
+def test_expand_parent_child_context_adds_parent():
+    matches = [{"chunk_id": "child", "content": "child", "metadata": {"parent_id": "parent"}, "score": 0.8}]
+    pool = [
+        {"chunk_id": "parent", "content": "parent", "metadata": {}, "score": 1.0},
+        {"chunk_id": "child", "content": "child", "metadata": {"parent_id": "parent"}, "score": 0.8},
+    ]
+
+    expanded = expand_parent_child_context(matches, pool)
+
+    assert any(item["chunk_id"] == "parent" for item in expanded)
+
+
+def test_build_input_content_query_includes_uploaded_content():
+    query = build_input_content_query(
+        {"file_name": "handbook.pdf", "file_type": "pdf", "content": "Escalation matrix"}
+    )
+    assert "handbook.pdf" in query
+    assert "Escalation matrix" in query
+
+
+def test_filter_low_value_evidence_removes_test_fixtures_for_validation():
+    matches = [
+        {"content": "fixture", "metadata": {"source_file": "README_Test_Pack.md"}, "score": 0.9},
+        {"content": "policy", "metadata": {"source_file": "ORR_Policy_Manual.docx"}, "score": 0.8},
+    ]
+    filtered = filter_low_value_evidence(matches, "validation")
+    assert len(filtered) == 1
+    assert filtered[0]["content"] == "policy"

@@ -1,10 +1,9 @@
 [project]
 name = "business-rule-ai"
 version = "0.1.0"
-description = "Streamlit RAG platform for business rule ingestion and review."
+description = "React and Python platform for strict business-rule validation and corrected-file exports."
 requires-python = ">=3.11"
 dependencies = [
-    "streamlit>=1.30.0",
     "pydantic>=2.0.0",
     "groq>=0.4.0",
     "openai>=1.10.0",
@@ -12,7 +11,9 @@ dependencies = [
     "sentence-transformers>=2.3.0",
     "pypdf>=4.0.0",
     "python-docx>=1.1.0",
-    "langgraph>=0.2.0,<1.0",
+    "openpyxl>=3.1.0",
+    "xlrd>=2.0.0",
+    "reportlab>=4.0.0",
 ]
 
 [project.optional-dependencies]

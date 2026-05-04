@@ -8,6 +8,9 @@ from typing import Optional
 import csv
 import json
 
+SPREADSHEET_SUFFIXES = {".xlsx", ".xlsm", ".xltx", ".xltm", ".xls"}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".avif", ".tif", ".tiff"}
+
 
 class UserInputFileParser:
     """Parses user input files (invoices, forms, etc.) for validation."""
@@ -26,6 +29,18 @@ class UserInputFileParser:
             return await self._parse_json(file_path)
         elif suffix in [".txt", ".md"]:
             return await self._parse_text(file_path)
+        elif suffix in SPREADSHEET_SUFFIXES:
+            return await self._parse_spreadsheet(file_path)
+        elif suffix in IMAGE_SUFFIXES:
+            return {
+                "file_name": file_path.name,
+                "file_type": suffix.lstrip("."),
+                "content": (
+                    f"[Image attached: {file_path.name}. The UI can preview this image, "
+                    "but text-only review currently cannot extract visual details automatically.]"
+                ),
+                "metadata": {"size_bytes": file_path.stat().st_size, "image": True},
+            }
         else:
             return {
                 "file_name": file_path.name,
@@ -122,6 +137,7 @@ class UserInputFileParser:
                 "rows": len(rows),
                 "columns": list(rows[0].keys()) if rows else [],
                 "size_bytes": file_path.stat().st_size,
+                "records": rows,
             },
         }
 
@@ -148,5 +164,67 @@ class UserInputFileParser:
             "metadata": {
                 "top_level_type": type(data).__name__,
                 "size_bytes": file_path.stat().st_size,
+                "records": data if isinstance(data, list) else [data] if isinstance(data, dict) else [],
+            },
+        }
+
+    async def _parse_spreadsheet(self, file_path: Path) -> dict:
+        suffix = file_path.suffix.lower()
+        records = []
+        text_parts = []
+
+        if suffix == ".xls":
+            try:
+                import xlrd
+                workbook = xlrd.open_workbook(str(file_path))
+                for sheet in workbook.sheets():
+                    headers = [str(sheet.cell_value(0, col)).strip() for col in range(sheet.ncols)] if sheet.nrows else []
+                    for row_index in range(1 if headers else 0, sheet.nrows):
+                        row = {
+                            headers[col] if col < len(headers) and headers[col] else f"column_{col + 1}": sheet.cell_value(row_index, col)
+                            for col in range(sheet.ncols)
+                        }
+                        records.append(row)
+                        values = [f"{key}: {value}" for key, value in row.items() if value not in (None, "")]
+                        text_parts.append(f"Sheet {sheet.name} Row {row_index + 1}\n" + "\n".join(values))
+            except Exception as exc:
+                return {
+                    "file_name": file_path.name,
+                    "file_type": suffix.lstrip("."),
+                    "content": f"[Spreadsheet parse error: {exc}]",
+                    "metadata": {"error": str(exc)},
+                }
+        else:
+            try:
+                from openpyxl import load_workbook
+                workbook = load_workbook(str(file_path), data_only=True, read_only=True)
+                for sheet in workbook.worksheets:
+                    rows = list(sheet.iter_rows(values_only=True))
+                    headers = [str(value).strip() if value is not None else "" for value in rows[0]] if rows else []
+                    for index, row_values in enumerate(rows[1 if headers else 0:], 1 if headers else 0):
+                        row = {
+                            headers[col] if col < len(headers) and headers[col] else f"column_{col + 1}": value
+                            for col, value in enumerate(row_values)
+                        }
+                        records.append(row)
+                        values = [f"{key}: {value}" for key, value in row.items() if value not in (None, "")]
+                        text_parts.append(f"Sheet {sheet.title} Row {index + 1}\n" + "\n".join(values))
+                workbook.close()
+            except Exception as exc:
+                return {
+                    "file_name": file_path.name,
+                    "file_type": suffix.lstrip("."),
+                    "content": f"[Spreadsheet parse error: {exc}]",
+                    "metadata": {"error": str(exc)},
+                }
+
+        return {
+            "file_name": file_path.name,
+            "file_type": suffix.lstrip("."),
+            "content": "\n\n".join(text_parts) or "[Spreadsheet contains no readable rows.]",
+            "metadata": {
+                "rows": len(records),
+                "size_bytes": file_path.stat().st_size,
+                "records": records,
             },
         }

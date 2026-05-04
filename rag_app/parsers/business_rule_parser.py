@@ -62,7 +62,16 @@ class BusinessRuleFileParser:
         try:
             import docx
             doc = docx.Document(file_path)
-            return "\n\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+            parts = [p.text for p in doc.paragraphs if p.text.strip()]
+            for table_index, table in enumerate(doc.tables, 1):
+                rows = []
+                for row in table.rows:
+                    cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+                    if any(cells):
+                        rows.append(" | ".join(cells))
+                if rows:
+                    parts.append(f"## DOCX Table {table_index}\n" + "\n".join(rows))
+            return "\n\n".join(parts)
         except Exception as exc:
             raise ValueError(f"DOCX parsing error: {exc}") from exc
     
@@ -220,7 +229,7 @@ class BusinessRuleFileParser:
                 "chunk_id": parent_id,
                 "parent_id": None,
                 "chunk_type": "parent",
-                "content": section_content[:parent_size],
+                "content": self._truncate_at_boundary(section_content, parent_size),
                 "section_path": section_title,
                 "source_file": source_file,
                 "source_page": source_page,
@@ -232,7 +241,7 @@ class BusinessRuleFileParser:
             overlap = 50
             
             while position < len(section_content):
-                end_pos = min(position + child_size, len(section_content))
+                end_pos = self._next_boundary(section_content, position, child_size)
                 child_content = section_content[position:end_pos]
                 chunks.append({
                     "chunk_id": str(uuid.uuid4()),
@@ -250,3 +259,25 @@ class BusinessRuleFileParser:
                     break
         
         return chunks
+
+    def _truncate_at_boundary(self, text: str, size: int) -> str:
+        if len(text) <= size:
+            return text
+        return text[: self._next_boundary(text, 0, size)]
+
+    def _next_boundary(self, text: str, start: int, size: int) -> int:
+        hard_end = min(start + size, len(text))
+        if hard_end >= len(text):
+            return hard_end
+
+        window = text[start:hard_end]
+        if "\n\n" in window:
+            boundary = start + window.rfind("\n\n")
+            return boundary if boundary > start else hard_end
+        if "\n" in window:
+            boundary = start + window.rfind("\n")
+            return boundary if boundary > start else hard_end
+        if " " in window:
+            boundary = start + window.rfind(" ")
+            return boundary if boundary > start else hard_end
+        return hard_end

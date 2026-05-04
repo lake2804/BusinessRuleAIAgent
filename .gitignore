@@ -50,8 +50,13 @@ data/uploads/*
 data/review_uploads/*
 !data/review_uploads/.gitkeep
 
-# Streamlit
-data/user_uploads/
+# Node / React frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+frontend/.env.local
 
 # Tests/tools
 .pytest_cache/
@@ -61,3 +66,4 @@ data/user_uploads/
 # OS
 .DS_Store
 Thumbs.db
+*.log
